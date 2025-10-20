@@ -7,6 +7,16 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { IamStack } from './iam-stack';
 
+interface InfraStackProps extends cdk.StackProps {
+	enviromnent: string;
+}
+
+interface EnvVars {
+	ecsCpu: number;
+	ecsMemory: number;
+	taskCount: number;
+}
+
 export class InfraStack extends cdk.Stack {
 	tagsData: { creator: string; project: string };
 	taskDefinition: cdk.aws_ecs.FargateTaskDefinition;
@@ -17,10 +27,14 @@ export class InfraStack extends cdk.Stack {
 	logGroup: any;
 	EcrRepo: cdk.aws_ecr.Repository;
 	roleStack: IamStack;
-	constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+	env: string | undefined;
+	envVars: EnvVars;
+	constructor(scope: Construct, id: string, props: InfraStackProps) {
 		super(scope, id, props);
 
 		// app config
+		this.env = props.enviromnent;
+		this.envVars = this.node.tryGetContext(this.env);
 		this.appPort = 80;
 
 		// tags data
@@ -46,9 +60,9 @@ export class InfraStack extends cdk.Stack {
 	private createECR() {
 		this.EcrRepo = new ecr.Repository(
 			this,
-			`${this.tagsData.project}-EcrRepo`,
+			`${this.tagsData.project}-${this.env}-EcrRepo`,
 			{
-				repositoryName: `${this.tagsData.creator}-EcrRepo`,
+				repositoryName: `${this.tagsData.creator}-${this.env}-EcrRepo`,
 			}
 		);
 	}
@@ -56,25 +70,26 @@ export class InfraStack extends cdk.Stack {
 	private createECS() {
 		const cluster = new ecs.Cluster(
 			this,
-			`${this.tagsData.project}-EcsCluster`,
+			`${this.tagsData.project}-${this.env}-EcsCluster`,
 			{
-				clusterName: `${this.tagsData.creator}-EcsCluster`,
+				clusterName: `${this.tagsData.creator}-${this.env}-EcsCluster`,
 			}
 		);
 
 		this.fargateService = new ecs.FargateService(this, 'service', {
 			cluster: cluster,
 			taskDefinition: this.taskDefinition,
+			desiredCount: this.envVars.taskCount,
 		});
 	}
 
 	private createTaskDefinition() {
 		this.taskDefinition = new ecs.FargateTaskDefinition(
 			this,
-			`${this.tagsData.project}-TaskDef`,
+			`${this.tagsData.project}-${this.env}-TaskDef`,
 			{
-				memoryLimitMiB: 512,
-				cpu: 256,
+				memoryLimitMiB: this.envVars.ecsMemory,
+				cpu: this.envVars.ecsCpu,
 				executionRole: this.roleStack.executionRole,
 			}
 		);
@@ -91,7 +106,7 @@ export class InfraStack extends cdk.Stack {
 	private createLoadBalancer() {
 		this.loadBalancer = new elbv2.ApplicationLoadBalancer(
 			this,
-			`${this.tagsData.project}-alb`,
+			`${this.tagsData.project}-${this.env}-alb`,
 			{
 				vpc: this.vpc,
 				internetFacing: true,

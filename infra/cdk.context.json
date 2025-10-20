@@ -1,0 +1,12 @@
+{
+	"prod": {
+		"ecsCpu": 512,
+		"ecsMemory": 1024,
+		"taskCount": 2
+	},
+	"dev": {
+		"ecsCpu": 512,
+		"ecsMemory": 1024,
+		"taskCount": 1
+	}
+}
