@@ -1,12 +1,17 @@
 {
-	"prod": {
-		"ecsCpu": 512,
-		"ecsMemory": 1024,
-		"taskCount": 2
-	},
-	"dev": {
-		"ecsCpu": 512,
-		"ecsMemory": 1024,
-		"taskCount": 1
-	}
+  "prod": {
+    "ecsCpu": 512,
+    "ecsMemory": 1024,
+    "taskCount": 2
+  },
+  "dev": {
+    "ecsCpu": 512,
+    "ecsMemory": 1024,
+    "taskCount": 1
+  },
+  "availability-zones:account=146082935119:region=eu-central-1": [
+    "eu-central-1a",
+    "eu-central-1b",
+    "eu-central-1c"
+  ]
 }

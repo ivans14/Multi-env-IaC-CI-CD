@@ -41,8 +41,9 @@ export class InfraStack extends cdk.Stack {
 		this.tagsData = { creator: 'ivan', project: 'iac-task' };
 
 		// network config
-		this.vpc = ec2.Vpc.fromLookup(this, 'DefaultVPC', {
-			isDefault: true,
+		this.vpc = new ec2.Vpc(this, 'VPC', {
+			maxAzs: 2,
+			natGateways: 0,
 		});
 
 		// create services
@@ -62,7 +63,7 @@ export class InfraStack extends cdk.Stack {
 			this,
 			`${this.tagsData.project}-${this.env}-EcrRepo`,
 			{
-				repositoryName: `${this.tagsData.creator}-${this.env}-EcrRepo`,
+				repositoryName: `${this.tagsData.creator}-${this.env}-ecr-repo`,
 			}
 		);
 	}
@@ -76,11 +77,24 @@ export class InfraStack extends cdk.Stack {
 			}
 		);
 
-		this.fargateService = new ecs.FargateService(this, 'service', {
-			cluster: cluster,
-			taskDefinition: this.taskDefinition,
-			desiredCount: this.envVars.taskCount,
-		});
+		this.fargateService = new ecs.FargateService(
+			this,
+			`${this.tagsData.creator}-${this.env}-EcsService`,
+			{
+				cluster: cluster,
+				taskDefinition: this.taskDefinition,
+				desiredCount: this.envVars.taskCount,
+				minHealthyPercent: 100,
+				maxHealthyPercent: 200,
+				healthCheckGracePeriod: cdk.Duration.seconds(60),
+				circuitBreaker: {
+					rollback: true,
+				},
+				deploymentController: {
+					type: ecs.DeploymentControllerType.ECS,
+				},
+			}
+		);
 	}
 
 	private createTaskDefinition() {
@@ -94,10 +108,14 @@ export class InfraStack extends cdk.Stack {
 			}
 		);
 		this.taskDefinition.addContainer('container', {
-			image: ecs.ContainerImage.fromEcrRepository(this.EcrRepo),
+			image: ecs.ContainerImage.fromAsset('../src'),
 			portMappings: [{ containerPort: this.appPort }],
+			// add our environment variables here (logging level or others)
+			environment: {
+				LOG_LEVEL: '10',
+			},
 			logging: ecs.LogDrivers.awsLogs({
-				streamPrefix: 'ivan-app',
+				streamPrefix: `ivan-${this.env}-app`,
 				logGroup: this.logGroup,
 			}),
 		});
@@ -114,18 +132,9 @@ export class InfraStack extends cdk.Stack {
 			}
 		);
 
-		this.loadBalancer.addRedirect({
-			sourceProtocol: elbv2.ApplicationProtocol.HTTP,
-			sourcePort: 80,
-			targetProtocol: elbv2.ApplicationProtocol.HTTPS,
-			targetPort: 443,
-		});
-
-		const listener = this.loadBalancer.addListener('listener443', {
-			port: 443,
-			protocol: elbv2.ApplicationProtocol.HTTPS,
-			defaultAction: elbv2.ListenerAction.fixedResponse(200, {}),
-			sslPolicy: elbv2.SslPolicy.RECOMMENDED_TLS,
+		const listener = this.loadBalancer.addListener('listener80', {
+			port: 80,
+			protocol: elbv2.ApplicationProtocol.HTTP,
 		});
 
 		listener.addTargets('Ecs-target', {
