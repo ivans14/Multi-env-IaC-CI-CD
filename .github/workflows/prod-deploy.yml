@@ -1,0 +1,58 @@
+name: Prod Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      imageTag:
+        description: 'Image tag'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src
+          file: ./src/Dockerfile
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/ivan-prod-ecr-repo:${{ inputs.imageTag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to ECS
+        run: |
+          echo "Deploying to production with rolling update..."
+          aws ecs update-service \
+            --cluster ivan-prod-EcsCluster \
+            --service ivan-prod-EcsService \
+            --force-new-deployment \
+            --region ${{ secrets.AWS_REGION }}
+
+          if [ $? -eq 0 ]; then
+            echo "Deployment initiated successfully"
+            echo "Image: ${{ steps.login-ecr.outputs.registry }}/ivan-prod-ecr-repo:${{ inputs.imageTag }}"
+          else
+            echo "Deployment failed"
+            exit 1
+          fi
